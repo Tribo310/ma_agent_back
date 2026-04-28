@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+magent2
+torch
+numpy
+python-multipart
