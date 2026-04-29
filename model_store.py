@@ -36,7 +36,25 @@ def validate_and_store(team: str, model_bytes: bytes) -> None:
             ) from exc
 
     if not callable(model):
-        raise ValueError("Loaded object is not callable — expected nn.Module or ScriptModule.")
+        if isinstance(model, dict):
+            tensor_values = sum(1 for v in model.values() if torch.is_tensor(v))
+            wrapper_keys = {"state_dict", "model_state_dict", "model"} & model.keys()
+            if wrapper_keys:
+                raise ValueError(
+                    f"Uploaded a checkpoint dict (keys: {list(model.keys())[:5]}…), not a model. "
+                    "Re-save the trained module itself: "
+                    "`torch.jit.save(torch.jit.script(model), 'model.pt')`."
+                )
+            if tensor_values and tensor_values == len(model):
+                raise ValueError(
+                    f"Uploaded a state_dict ({tensor_values} tensors), not a model. "
+                    "A state_dict has no architecture, so the server cannot run it. "
+                    "Re-save the module: `torch.jit.save(torch.jit.script(model), 'model.pt')`."
+                )
+        raise ValueError(
+            f"Loaded object is not callable (got {type(model).__name__}) — "
+            "expected nn.Module or TorchScript ScriptModule."
+        )
 
     model.eval()
 

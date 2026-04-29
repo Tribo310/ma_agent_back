@@ -8,6 +8,8 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 
+import traceback
+
 import model_store
 from battle_runner import run_battle
 
@@ -34,6 +36,21 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/test-env")
+async def test_env() -> dict:
+    """Diagnose magent2 import and env creation."""
+    try:
+        from magent2.environments import battle_v4
+        env = battle_v4.parallel_env(map_size=15, max_cycles=3)
+        reset_result = env.reset()
+        obs = reset_result[0] if isinstance(reset_result, tuple) else reset_result
+        n = len(env.agents)
+        env.close()
+        return {"status": "ok", "agents": n, "sample_agent": list(obs.keys())[0]}
+    except Exception as exc:
+        return {"status": "error", "detail": traceback.format_exc(), "error": str(exc)}
 
 
 @app.get("/ready")
@@ -80,8 +97,10 @@ async def battle_ws(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     except Exception as exc:
+        detail = traceback.format_exc()
+        print("BATTLE ERROR:\n", detail)          # visible in Railway logs
         try:
-            await websocket.send_json({"error": str(exc)})
+            await websocket.send_json({"error": str(exc), "detail": detail})
         except Exception:
             pass
     finally:
