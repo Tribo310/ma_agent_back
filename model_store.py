@@ -37,20 +37,32 @@ def validate_and_store(team: str, model_bytes: bytes) -> None:
 
     if not callable(model):
         if isinstance(model, dict):
+            keys_preview = list(model.keys())[:6]
             tensor_values = sum(1 for v in model.values() if torch.is_tensor(v))
-            wrapper_keys = {"state_dict", "model_state_dict", "model"} & model.keys()
-            if wrapper_keys:
+            wrapper_candidates = {
+                "state_dict", "model_state_dict", "model",
+                "policy_state_dict", "policy", "actor_state_dict", "actor",
+                "net", "network", "weights", "params",
+            }
+            wrapper_hit = wrapper_candidates & set(model.keys())
+            if wrapper_hit:
                 raise ValueError(
-                    f"Uploaded a checkpoint dict (keys: {list(model.keys())[:5]}…), not a model. "
+                    f"Uploaded a checkpoint dict (keys: {keys_preview}), not a model. "
+                    f"It contains '{next(iter(wrapper_hit))}' but no architecture. "
                     "Re-save the trained module itself: "
                     "`torch.jit.save(torch.jit.script(model), 'model.pt')`."
                 )
-            if tensor_values and tensor_values == len(model):
+            if tensor_values >= 1:
                 raise ValueError(
-                    f"Uploaded a state_dict ({tensor_values} tensors), not a model. "
-                    "A state_dict has no architecture, so the server cannot run it. "
+                    f"Uploaded a dict of {tensor_values} tensor(s) (keys: {keys_preview}) — "
+                    "looks like a state_dict, not a model. A state_dict has no architecture, "
+                    "so the server cannot run it. "
                     "Re-save the module: `torch.jit.save(torch.jit.script(model), 'model.pt')`."
                 )
+            raise ValueError(
+                f"Uploaded a dict (keys: {keys_preview}) — not a model. "
+                "Re-save the module: `torch.jit.save(torch.jit.script(model), 'model.pt')`."
+            )
         raise ValueError(
             f"Loaded object is not callable (got {type(model).__name__}) — "
             "expected nn.Module or TorchScript ScriptModule."
